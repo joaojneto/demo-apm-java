@@ -1,6 +1,7 @@
 package com.example.apm2.service;
 
 import co.elastic.apm.api.ElasticApm;
+import co.elastic.apm.api.Scope;
 import co.elastic.apm.api.Span;
 import co.elastic.apm.api.Transaction;
 import io.micrometer.core.instrument.Counter;
@@ -20,7 +21,6 @@ public class ProductService {
 
     private static final Logger log = LoggerFactory.getLogger(ProductService.class);
 
-    // Simula um "banco" em memória
     private final Map<String, Map<String, Object>> productDatabase = new ConcurrentHashMap<>();
     private final AtomicInteger activeCacheSize = new AtomicInteger(0);
 
@@ -30,7 +30,6 @@ public class ProductService {
     private final Counter cacheMissCounter;
 
     public ProductService(MeterRegistry meterRegistry) {
-        // Contadores
         this.productSearchCounter = Counter.builder("products.search.total")
                 .description("Total de buscas de produto")
                 .tag("service", "product-service")
@@ -51,51 +50,39 @@ public class ProductService {
                 .tag("service", "product-service")
                 .register(meterRegistry);
 
-        // Gauge — valor instantâneo (tamanho do cache)
         Gauge.builder("products.cache.size", activeCacheSize, AtomicInteger::get)
                 .description("Número de produtos no cache")
                 .tag("service", "product-service")
                 .register(meterRegistry);
 
-        // Popula alguns produtos de exemplo
         seedDatabase();
     }
 
-    /**
-     * Busca de produto com controle MANUAL de Transaction e Spans.
-     * Demonstra a API fluente do APM para casos onde as anotações não bastam.
-     */
     public Map<String, Object> searchProduct(String productId) {
-        /*
-         * Para endpoints HTTP o agente já cria a transação automaticamente.
-         * Aqui mostramos como ENRIQUECER a transação existente com labels,
-         * além de criar spans filhos manualmente.
-         */
         Transaction transaction = ElasticApm.currentTransaction();
         transaction.addLabel("product_id", productId);
-        transaction.setName("GET /products/" + productId); // renomeia no APM UI
+        transaction.setName("GET /products/" + productId);
 
         log.info("Buscando produto productId={}", productId);
         productSearchCounter.increment();
 
         // Span 1: verificar cache
+        // Scope.close() faz o deactivate — compatível com todas as versões do agente
         Span cacheSpan = ElasticApm.currentSpan()
                 .startSpan("app", "cache", "redis-local")
                 .setName("cache.get product:" + productId);
-        try {
-            cacheSpan.activate();
+        try (Scope cacheScope = cacheSpan.activate()) {
             return checkCache(productId, transaction);
         } finally {
-            cacheSpan.deactivate();
             cacheSpan.end();
         }
     }
 
     private Map<String, Object> checkCache(String productId, Transaction transaction) {
-        sleep(2, 8); // latência do cache
+        sleep(2, 8);
 
         boolean cacheHit = productDatabase.containsKey(productId) &&
-                ThreadLocalRandom.current().nextBoolean(); // simula 50% hit rate
+                ThreadLocalRandom.current().nextBoolean();
 
         if (cacheHit) {
             cacheHitCounter.increment();
@@ -112,17 +99,15 @@ public class ProductService {
         Span dbSpan = ElasticApm.currentSpan()
                 .startSpan("db", "postgresql", "query")
                 .setName("SELECT products WHERE id=" + productId);
-        try {
-            dbSpan.activate();
+        try (Scope dbScope = dbSpan.activate()) {
             return fetchFromDatabase(productId, transaction);
         } finally {
-            dbSpan.deactivate();
             dbSpan.end();
         }
     }
 
     private Map<String, Object> fetchFromDatabase(String productId, Transaction transaction) {
-        sleep(20, 100); // latência do banco
+        sleep(20, 100);
 
         Map<String, Object> product = productDatabase.get(productId);
 
@@ -143,9 +128,6 @@ public class ProductService {
         return product;
     }
 
-    /**
-     * Atualização com span de auditoria — mostra como criar span com erro
-     */
     public Map<String, Object> updatePrice(String productId, double newPrice) {
         Transaction transaction = ElasticApm.currentTransaction();
         transaction.addLabel("product_id", productId);
@@ -156,8 +138,7 @@ public class ProductService {
         Span auditSpan = ElasticApm.currentSpan()
                 .startSpan("app", "audit", "price-audit")
                 .setName("audit.priceChange");
-        try {
-            auditSpan.activate();
+        try (Scope auditScope = auditSpan.activate()) {
             sleep(5, 15);
 
             if (newPrice < 0) {
@@ -169,7 +150,6 @@ public class ProductService {
 
             log.info("Auditoria aprovada productId={} newPrice={}", productId, newPrice);
         } finally {
-            auditSpan.deactivate();
             auditSpan.end();
         }
 
