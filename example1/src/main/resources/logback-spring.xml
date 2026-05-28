@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  logback-spring.xml — Correlação de Logs com Elastic APM
+  
+  O EcsEncoder injeta automaticamente os campos:
+    - trace.id       → vem do MDC via APM Agent (enable_log_correlation=true)
+    - transaction.id → idem
+    - span.id        → idem
+    - service.name   → nome configurado no APM
+  
+  Isso faz os logs aparecerem na aba "Logs" do APM por transação.
+-->
+<configuration>
+
+    <!-- Appender para Console (desenvolvimento) -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="co.elastic.logging.logback.EcsEncoder">
+            <serviceName>order-service</serviceName>
+            <serviceVersion>1.0.0</serviceVersion>
+            <serviceEnvironment>development</serviceEnvironment>
+            <serviceNodeName>${HOSTNAME}</serviceNodeName>
+        </encoder>
+    </appender>
+
+    <!-- Appender para arquivo JSON (para Filebeat enviar ao Elasticsearch) -->
+    <appender name="FILE_JSON" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/order-service.json</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>logs/order-service.%d{yyyy-MM-dd}.json</fileNamePattern>
+            <maxHistory>7</maxHistory>
+        </rollingPolicy>
+        <encoder class="co.elastic.logging.logback.EcsEncoder">
+            <serviceName>order-service</serviceName>
+            <serviceVersion>1.0.0</serviceVersion>
+            <serviceEnvironment>development</serviceEnvironment>
+        </encoder>
+    </appender>
+
+    <!-- Root logger -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE_JSON"/>
+    </root>
+
+    <logger name="com.example.apm1" level="DEBUG"/>
+
+</configuration>

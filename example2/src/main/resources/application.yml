@@ -1,0 +1,19 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: product-service
+
+management:
+  metrics:
+    export:
+      elastic:
+        enabled: true
+        host: http://localhost:9200
+        index: metrics-product-service
+        step: 30s
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,info

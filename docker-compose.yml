@@ -1,0 +1,99 @@
+version: "3.9"
+
+# ================================================================
+#  Elastic APM — Exemplos Java 11 + Spring Web MVC
+#
+#  Configuração: edite apenas o arquivo .env
+#    APM_SERVER_URL=https://...
+#    APM_API_KEY=...
+#
+#  Subir tudo:
+#    docker compose up --build
+#
+#  Subir só as apps (sem chaos):
+#    docker compose up --build order-service product-service
+# ================================================================
+
+services:
+
+  # ── Exemplo 1: Order Service ────────────────────────────────
+  order-service:
+    build:
+      context: ./example1
+      args:
+        APM_AGENT_VERSION: ${APM_AGENT_VERSION:-1.51.0}
+    container_name: order-service
+    ports:
+      - "8081:8081"
+    environment:
+      ELASTIC_APM_SERVER_URL: ${APM_SERVER_URL}
+      ELASTIC_APM_API_KEY:    ${APM_API_KEY}
+      APM_ENVIRONMENT:        ${APM_ENVIRONMENT:-development}
+      SERVER_PORT: 8081
+      JAVA_OPTS: "-Xms256m -Xmx512m"
+    volumes:
+      - order-logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+    restart: unless-stopped
+
+  # ── Exemplo 2: Product Service ──────────────────────────────
+  product-service:
+    build:
+      context: ./example2
+      args:
+        APM_AGENT_VERSION: ${APM_AGENT_VERSION:-1.51.0}
+    container_name: product-service
+    ports:
+      - "8082:8082"
+    environment:
+      JAVA_TOOL_OPTIONS: >-
+        -Delastic.apm.server_url=${APM_SERVER_URL}
+        -Delastic.apm.api_key=${APM_API_KEY}
+        -Delastic.apm.service_name=product-service
+        -Delastic.apm.service_version=1.0.0
+        -Delastic.apm.environment=${APM_ENVIRONMENT:-development}
+        -Delastic.apm.application_packages=com.example.apm2
+        -Delastic.apm.enable_log_correlation=true
+        -Delastic.apm.capture_body=all
+        -Xms256m
+        -Xmx512m
+      SERVER_PORT: 8082
+    volumes:
+      - product-logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/products/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+    restart: unless-stopped
+
+  # ── k6 Chaos Monkey ─────────────────────────────────────────
+  # Aguarda os healthchecks das apps antes de começar.
+  # Gera tráfego misto: pedidos válidos, buscas, atualizações de
+  # preço, erros forçados e payloads malformados (chaos).
+  k6-monkey:
+    image: grafana/k6:latest
+    container_name: k6-monkey
+    depends_on:
+      order-service:
+        condition: service_healthy
+      product-service:
+        condition: service_healthy
+    volumes:
+      - ./k6:/scripts
+    environment:
+      ORDER_SERVICE_URL:   http://order-service:8081
+      PRODUCT_SERVICE_URL: http://product-service:8082
+    # --no-usage-report desativa telemetria do k6
+    command: run --no-usage-report /scripts/monkey.js
+    restart: unless-stopped
+
+volumes:
+  order-logs:
+  product-logs:

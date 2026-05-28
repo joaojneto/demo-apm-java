@@ -1,0 +1,49 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: order-service
+
+# =============================================
+# Elastic APM - configuração via application.yml
+# (Alternativa ao -javaagent: mais fácil para testes)
+# =============================================
+elastic:
+  apm:
+    service_name: order-service
+    service_version: 1.0.0
+    environment: development
+    server_url: http://localhost:8200        # URL do seu APM Server
+    secret_token:                            # deixe em branco se sem autenticação
+    # api_key: SUA_API_KEY_AQUI             # use api_key OU secret_token
+    application_packages: com.example.apm1
+    log_level: INFO
+    # Correlação de logs: injeta trace.id, transaction.id nos MDC do Logback
+    enable_log_correlation: true
+    # Captura o corpo das requests HTTP (cuidado em produção!)
+    capture_body: all
+    # Captura headers HTTP
+    capture_headers: true
+    # Métricas customizadas via Micrometer
+    metrics_interval: 30s
+
+# =============================================
+# Micrometer → Elasticsearch (métricas)
+# =============================================
+management:
+  metrics:
+    export:
+      elastic:
+        enabled: true
+        host: http://localhost:9200          # URL do seu Elasticsearch
+        # api-key: SUA_API_KEY_AQUI
+        index: metrics-order-service
+        step: 30s
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,info
+  endpoint:
+    health:
+      show-details: always

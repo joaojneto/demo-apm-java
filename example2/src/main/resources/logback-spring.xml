@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="co.elastic.logging.logback.EcsEncoder">
+            <serviceName>product-service</serviceName>
+            <serviceVersion>1.0.0</serviceVersion>
+            <serviceEnvironment>development</serviceEnvironment>
+        </encoder>
+    </appender>
+
+    <appender name="FILE_JSON" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/product-service.json</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>logs/product-service.%d{yyyy-MM-dd}.json</fileNamePattern>
+            <maxHistory>7</maxHistory>
+        </rollingPolicy>
+        <encoder class="co.elastic.logging.logback.EcsEncoder">
+            <serviceName>product-service</serviceName>
+            <serviceVersion>1.0.0</serviceVersion>
+            <serviceEnvironment>development</serviceEnvironment>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE_JSON"/>
+    </root>
+
+    <logger name="com.example.apm2" level="DEBUG"/>
+
+</configuration>
